@@ -1,9 +1,17 @@
 #[derive(Debug, Clone)]
-pub enum Node {
-    /// This usually proceeds after a DEFINE FUNCTION/MODULE.
-    Block(Vec<Box<Node>>),
-    Module {
-        name: String,
-        nodes: Vec<Box<Node>>,
-    },
+pub enum LiteralExpr {
+    String(String),
+}
+
+#[derive(Debug, Clone)]
+pub enum Expr {
+    Literal(LiteralExpr),
+}
+
+#[derive(Debug, Clone)]
+pub enum Stmt {
+    Block(Vec<Box<Stmt>>),
+    Module { name: LiteralExpr, nodes: Box<Stmt> },
+    Expr(Expr),
+    Variable { name: String, value: Option<Expr> },
 }

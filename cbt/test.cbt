@@ -1,5 +1,0 @@
-DEFINE MODULE "main"
-
-DEFINE FUNCTION "print_and_meow" END FUNCTION.
-
-END MODULE

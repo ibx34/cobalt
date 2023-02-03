@@ -1,0 +1,6 @@
+DEFINE MODULE "main" WITH CONTENTS:
+
+SET "variable" EQUAL TO "test".
+SET "variable2" EQUAL TO "test2".
+
+END MODULE "main".
