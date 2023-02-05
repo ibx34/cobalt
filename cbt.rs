@@ -29,6 +29,7 @@ pub enum Words {
     A,
     Expects,
     That,
+    Contains,
 }
 
 impl TryFrom<&str> for Words {
@@ -44,6 +45,7 @@ impl TryFrom<&str> for Words {
             "the" => Ok(Self::The),
             "with" => Ok(Self::With),
             "contents" => Ok(Self::Contents),
+            "contains" => Ok(Self::Contains),
             "end" => Ok(Self::End),
             "is" => Ok(Self::Is),
             "to" => Ok(Self::To),
@@ -75,6 +77,7 @@ impl From<Words> for String {
             Words::A => "a",
             Words::Expects => "expects",
             Words::That => "that",
+            Words::Contains => "contains",
         }
         .to_ascii_uppercase()
     }
@@ -217,6 +220,7 @@ fn main() {
     };
 
     lexer.lex_all();
+    println!("{:#?}", lexer.results.ast);
 
     let mut parser = p::Parser {
         source: lexer.results.ast.into_iter().peekable(),
@@ -229,51 +233,4 @@ fn main() {
     unsafe {
         cg::codegen(parser.nodes);
     }
-
-    // println!("{:?}", parser.nodes);
-
-    // macro_rules! cstr {
-    //     ($s:expr) => {
-    //         std::ffi::CString::new($s).unwrap().as_ptr()
-    //     };
-    // }
-
-    // unsafe {
-    //     let module = llvm::core::LLVMModuleCreateWithName(cstr!("main"));
-    //     let printf_ty =
-    //         llvm::core::LLVMFunctionType(llvm::core::LLVMInt32Type(), [].as_mut_ptr(), 0, 1);
-    //     let printf = llvm::core::LLVMAddFunction(module, cstr!("printf"), printf_ty);
-    //     let func_ty =
-    //         llvm::core::LLVMFunctionType(llvm::core::LLVMInt32Type(), [].as_mut_ptr(), 0, 0);
-    //     let func = llvm::core::LLVMAddFunction(module, cstr!("main"), func_ty);
-
-    //     let bb = llvm::core::LLVMAppendBasicBlock(func, cstr!("entry"));
-
-    //     let builder = llvm::core::LLVMCreateBuilder();
-    //     llvm::core::LLVMPositionBuilderAtEnd(builder, bb);
-
-    //     let strptr =
-    //         llvm::core::LLVMBuildGlobalStringPtr(builder, cstr!("hello world"), cstr!("hello"));
-
-    //     let mut call_args = [strptr];
-
-    //     let call = llvm::core::LLVMBuildCall2(
-    //         builder,
-    //         printf_ty,
-    //         printf,
-    //         call_args.as_mut_ptr(),
-    //         call_args.len() as u32,
-    //         cstr!("call"),
-    //     );
-
-    //     llvm::core::LLVMBuildRet(builder, call);
-    //     llvm::analysis::LLVMVerifyModule(
-    //         module,
-    //         LLVMVerifierFailureAction::LLVMAbortProcessAction,
-    //         std::ptr::null_mut(),
-    //     );
-    //     llvm::core::LLVMDumpModule(module);
-    //     llvm::core::LLVMDisposeBuilder(builder);
-    //     llvm::core::LLVMDisposeModule(module);
-    // }
 }

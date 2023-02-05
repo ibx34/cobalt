@@ -25,6 +25,7 @@ where
 {
     pub fn parse(&mut self) {
         while let Some(stmt) = self.parse_stmt() {
+            println!("stmt");
             self.nodes.push(stmt);
         }
     }
@@ -41,6 +42,7 @@ where
                             };
                             match word.which {
                                 Words::Function => {
+                                    println!("GOT FUNCTION");
                                     self.advance();
                                     let Some(Stmt::Expr(Expr::Literal(LiteralExpr::String(func_name)))) = self.parse_string() else {
                                         panic!("Failed to parse function name");
@@ -63,6 +65,8 @@ where
                                         }))
                                         .is_some()
                                     {
+                                        // why?
+                                        self.advance();
                                         self.advance();
                                         if self.expect_and_return(Tokens::Colon).is_none() {
                                             panic!("Expected a colon.");
