@@ -1,11 +1,14 @@
-use std::ops::Range;
+use llvm::{analysis::LLVMVerifierFailureAction, LLVMType, LLVMValue};
+use llvm_sys as llvm;
+use std::{
+    ops::Range,
+    ptr::{self, null_mut},
+};
 
-// abstract syntax tree
 pub mod ast;
-// The parser
-pub mod p;
-// Nodes
+pub mod cg;
 pub mod node;
+pub mod p;
 
 // Non-plural list of words. Some of these may be plural, or end an S, which will be handled later on.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -23,6 +26,9 @@ pub enum Words {
     Is,
     To,
     Set,
+    A,
+    Expects,
+    That,
 }
 
 impl TryFrom<&str> for Words {
@@ -42,6 +48,9 @@ impl TryFrom<&str> for Words {
             "is" => Ok(Self::Is),
             "to" => Ok(Self::To),
             "set" => Ok(Self::Set),
+            "a" => Ok(Self::A),
+            "expects" => Ok(Self::Expects),
+            "that" => Ok(Self::That),
             _ => Err(String::from("Ye bad")),
         }
     }
@@ -63,6 +72,9 @@ impl From<Words> for String {
             Words::Is => "is",
             Words::To => "to",
             Words::Set => "set",
+            Words::A => "a",
+            Words::Expects => "expects",
+            Words::That => "that",
         }
         .to_ascii_uppercase()
     }
@@ -196,7 +208,7 @@ impl Lexer {
 }
 
 fn main() {
-    let input_str = std::fs::read_to_string("cbt/test_modules.cbt").unwrap();
+    let input_str = std::fs::read_to_string("tests/pass/module_level_func.cbt").unwrap();
 
     let mut lexer = Lexer {
         source: input_str.chars().collect(),
@@ -213,5 +225,55 @@ fn main() {
         source_str: lexer.source,
     };
     parser.parse();
-    println!("{:#?}", parser.nodes);
+
+    unsafe {
+        cg::codegen(parser.nodes);
+    }
+
+    // println!("{:?}", parser.nodes);
+
+    // macro_rules! cstr {
+    //     ($s:expr) => {
+    //         std::ffi::CString::new($s).unwrap().as_ptr()
+    //     };
+    // }
+
+    // unsafe {
+    //     let module = llvm::core::LLVMModuleCreateWithName(cstr!("main"));
+    //     let printf_ty =
+    //         llvm::core::LLVMFunctionType(llvm::core::LLVMInt32Type(), [].as_mut_ptr(), 0, 1);
+    //     let printf = llvm::core::LLVMAddFunction(module, cstr!("printf"), printf_ty);
+    //     let func_ty =
+    //         llvm::core::LLVMFunctionType(llvm::core::LLVMInt32Type(), [].as_mut_ptr(), 0, 0);
+    //     let func = llvm::core::LLVMAddFunction(module, cstr!("main"), func_ty);
+
+    //     let bb = llvm::core::LLVMAppendBasicBlock(func, cstr!("entry"));
+
+    //     let builder = llvm::core::LLVMCreateBuilder();
+    //     llvm::core::LLVMPositionBuilderAtEnd(builder, bb);
+
+    //     let strptr =
+    //         llvm::core::LLVMBuildGlobalStringPtr(builder, cstr!("hello world"), cstr!("hello"));
+
+    //     let mut call_args = [strptr];
+
+    //     let call = llvm::core::LLVMBuildCall2(
+    //         builder,
+    //         printf_ty,
+    //         printf,
+    //         call_args.as_mut_ptr(),
+    //         call_args.len() as u32,
+    //         cstr!("call"),
+    //     );
+
+    //     llvm::core::LLVMBuildRet(builder, call);
+    //     llvm::analysis::LLVMVerifyModule(
+    //         module,
+    //         LLVMVerifierFailureAction::LLVMAbortProcessAction,
+    //         std::ptr::null_mut(),
+    //     );
+    //     llvm::core::LLVMDumpModule(module);
+    //     llvm::core::LLVMDisposeBuilder(builder);
+    //     llvm::core::LLVMDisposeModule(module);
+    // }
 }
