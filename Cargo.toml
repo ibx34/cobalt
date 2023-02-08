@@ -6,3 +6,4 @@ edition = "2021"
 [dependencies]
 llvm-sys = "140.0.5"
 codespan-reporting = "0.11.1"
+phf = { version = "0.11", features = ["macros"] }

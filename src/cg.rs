@@ -106,7 +106,7 @@ where
                                         };
                                         variable_ptr.ptr
                                         // doesn't like to load stuff?
-                                        //LLVMBuildLoad2(self.builder, variable_ptr.ty, variable_ptr.ptr, cstr!("".as_bytes()))
+                                        // LLVMBuildLoad2(self.builder, variable_ptr.ty, variable_ptr.ptr, cstr!("".as_bytes()))
                                     }
                                     _ => unimplemented!(),
                                 })

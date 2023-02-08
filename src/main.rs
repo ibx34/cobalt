@@ -1,7 +1,10 @@
 use std::ops::Range;
 
+use errors::ErrorClient;
+
 pub mod ast;
 pub mod cg;
+pub mod errors;
 pub mod node;
 pub mod p;
 
@@ -176,6 +179,19 @@ impl Lexer {
                             }),
                             Some(current_idx..self.idx),
                         );
+                    } else {
+                        let mut error = ErrorClient::new("0002", crate::errors::MessageKind::ERROR);
+                        error.end_process(true);
+                        // TODO: The parser should have a context field that is aware of this kind of stuff.
+                        error.set_file(
+                            "module_level_func.cbt",
+                            "./tests/pass/module_level_func.cbt",
+                        );
+                        error.set_span(current_idx..self.idx + 1);
+                        let note = format!("This is not a valid keyword");
+                        error.add_label(Some(&note));
+                        error.build_and_emit();
+                        return;
                     }
                 }
             }

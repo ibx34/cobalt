@@ -6,6 +6,7 @@ use std::iter::Peekable;
 
 use crate::node::FunctionCall;
 use crate::{
+    errors::ErrorClient,
     node::{Expr, LiteralExpr, Stmt, VariableType},
     Token, Tokens, Word, Words,
 };
@@ -268,30 +269,21 @@ where
         for token in expect {
             if let Some(current_tok) = self.source.peek() {
                 if current_tok.inner != token {
-                    let mut files = SimpleFiles::new();
-                    let file_id = files.add(
+                    let mut error = ErrorClient::new("0001", crate::errors::MessageKind::ERROR);
+                    error.end_process(true);
+                    // TODO: The parser should have a context field that is aware of this kind of stuff.
+                    error.set_file(
                         "module_level_func.cbt",
-                        std::fs::read_to_string("./tests/pass/module_level_func.cbt").unwrap(),
+                        "./tests/pass/module_level_func.cbt",
                     );
-
-                    let diagnostic = Diagnostic::error()
-                        .with_message("Expected a different word.")
-                        .with_labels(vec![Label::primary(
-                            file_id,
-                            current_tok.location.span.clone(),
-                        )
-                        .with_message(format!(
-                            "Expected `{}` but got `{}` instead.",
-                            token.to_string(),
-                            current_tok.inner.to_string()
-                        ))])
-                        .with_notes(vec![String::from("ye?")]);
-
-                    let writer = StandardStream::stderr(ColorChoice::Always);
-                    let config = codespan_reporting::term::Config::default();
-
-                    term::emit(&mut writer.lock(), &config, &files, &diagnostic).unwrap();
-                    std::process::exit(1);
+                    error.set_span(current_tok.location.span.clone());
+                    let note = format!(
+                        "Expected the word `{}` but instead got `{}`",
+                        token.to_string(),
+                        current_tok.inner.to_string()
+                    );
+                    error.add_label(Some(&note));
+                    error.build_and_emit();
                 }
             } else {
                 panic!("Failed to get current token");
