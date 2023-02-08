@@ -25,6 +25,7 @@ Ye, it doesn't do much.
 ## Using
 
 > **info** The officially supported extensions are `.cbt` and `.cobalt`. However, it doesn't matter what you use.   
+
 **This version of Cobalt will ONLY run the tests specified in `/tests`. To play around with the code you MUST create a file here.**
 
 To get started, you will need to have `LLVM 14`, Rust, C-lang (`clang`). Start by running `cargo run`, this will lex, parse and compile
