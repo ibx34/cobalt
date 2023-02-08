@@ -4,8 +4,15 @@ pub enum LiteralExpr {
 }
 
 #[derive(Debug, Clone)]
+pub struct FunctionCall {
+    pub func: Box<Expr>,
+    pub args: Option<Vec<Box<Expr>>>,
+}
+
+#[derive(Debug, Clone)]
 pub enum Expr {
     Literal(LiteralExpr),
+    Call(FunctionCall),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

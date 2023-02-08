@@ -24,7 +24,9 @@ pub enum Words {
     A,
     Expects,
     That,
+    Returns,
     Contains,
+    Display,
 }
 
 impl TryFrom<&str> for Words {
@@ -48,6 +50,8 @@ impl TryFrom<&str> for Words {
             "a" => Ok(Self::A),
             "expects" => Ok(Self::Expects),
             "that" => Ok(Self::That),
+            "returns" => Ok(Self::Returns),
+            "display" => Ok(Self::Display),
             _ => Err(String::from("Ye bad")),
         }
     }
@@ -73,6 +77,8 @@ impl From<Words> for String {
             Words::Expects => "expects",
             Words::That => "that",
             Words::Contains => "contains",
+            Words::Returns => "returns",
+            Words::Display => "display",
         }
         .to_ascii_uppercase()
     }
@@ -107,6 +113,19 @@ pub enum Tokens {
     String,
     DollarSign,
     Period,
+}
+
+impl ToString for Tokens {
+    fn to_string(&self) -> String {
+        match self {
+            Tokens::SemiColon => ";".to_string(),
+            Tokens::Colon => ":".to_string(),
+            Tokens::DollarSign => "$".to_string(),
+            Tokens::Period => ".".to_string(),
+            Tokens::Word(word) => word.which.clone().into(),
+            _ => "Unable to turn into string.".to_string(),
+        }
+    }
 }
 
 pub struct Lexer {
@@ -229,7 +248,9 @@ fn main() {
         let mut codegen = cg::CodeGen::init(parser.nodes.into_iter().peekable());
         codegen.setup_main_module();
         let func = codegen.stmts.next().unwrap();
-        codegen.visit_fn(&func);
+        codegen.visit_fn(func);
+        let func = codegen.stmts.next().unwrap();
+        codegen.visit_fn(func);
         codegen.verify_and_dump();
     }
 }

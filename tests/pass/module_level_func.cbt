@@ -1,5 +1,12 @@
-DEFINE FUNCTION "main" THAT CONTAINS: 
+DEFINE FUNCTION "test_func_call" THAT RETURNS A String: 
 
-    SET "variable" EQUAL TO "haha".
+    SET "to_print" EQUAL TO "what?".
+    CALL FUNCTION "printf" WITH THE ARGUMENT "to_print".
+
+END FUNCTION "test_func_call".
+
+DEFINE FUNCTION "main" THAT RETURNS A String: 
+
+    CALL FUNCTION "test_func_call".
 
 END FUNCTION "main".

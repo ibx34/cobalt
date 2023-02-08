@@ -5,10 +5,19 @@
 
 
 Ye, im just as confused as you... Who made this? Who thought cobol was a good idea? Is this good? Who knows.
-Here is an example :)  
+Here is an example :) (Please note this language is REALLY NEW :) so lets not get too excited.)  
 ```
-DEFINE MODULE "main" WITH CONTENTS:
+DEFINE FUNCTION "test_func_call" THAT RETURNS A String: 
 
-END MODULE "main".
+    SET "to_print" EQUAL TO "what?".
+    CALL FUNCTION "printf" WITH THE ARGUMENT "to_print".
+
+END FUNCTION "test_func_call".
+
+DEFINE FUNCTION "main" THAT RETURNS A String: 
+
+    CALL FUNCTION "test_func_call".
+
+END FUNCTION "main".
 ```  
 Ye, it doesn't do much.

@@ -1,5 +1,10 @@
+use codespan_reporting::diagnostic::{Diagnostic, Label};
+use codespan_reporting::files::SimpleFiles;
+use codespan_reporting::term;
+use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
 use std::iter::Peekable;
 
+use crate::node::FunctionCall;
 use crate::{
     node::{Expr, LiteralExpr, Stmt, VariableType},
     Token, Tokens, Word, Words,
@@ -33,6 +38,60 @@ where
             match &current.inner {
                 Tokens::DollarSign => return Some(Stmt::Token(Tokens::DollarSign)),
                 Tokens::Word(word) => match word.which {
+                    Words::Call => {
+                        self.advance();
+                        if let Some(next) = self.source.peek() {
+                            let Tokens::Word(word) = &next.inner else {
+                                panic!("Expected the word MODULE but instead got: {next:?}");
+                            };
+                            match word.which {
+                                Words::Function => {
+                                    self.advance();
+                                    let Some(Stmt::Expr(Expr::Literal(lit))) = self.parse_string() else {
+                                        panic!("Failed to parse function name");
+                                    };
+                                    self.advance();
+
+                                    if self.expect(Tokens::Word(Word {
+                                        which: Words::With,
+                                        plural: false,
+                                    })) {
+                                        if self.expect(Tokens::Word(Word {
+                                            which: Words::The,
+                                            plural: false,
+                                        })) {
+                                            self.expect_and_skip(vec![Tokens::Word(Word {
+                                                which: Words::Argument,
+                                                plural: false,
+                                            })]);
+
+                                            // TODO: make a parse_expr function to make stuff like this WAY easier.
+                                            let Some(Stmt::Expr(Expr::Literal(only_arg))) = self.parse_string() else {
+                                                panic!("Failed to parse function name");
+                                            };
+                                            self.advance();
+
+                                            return Some(Stmt::Expr(Expr::Call(FunctionCall {
+                                                func: Box::new(Expr::Literal(lit)),
+                                                args: Some(vec![Box::new(Expr::Literal(only_arg))]),
+                                            })));
+                                        } else {
+                                            unimplemented!(
+                                                "Multiple function call args is NOT supported."
+                                            );
+                                        }
+                                    } else {
+                                        self.advance();
+                                        return Some(Stmt::Expr(Expr::Call(FunctionCall {
+                                            func: Box::new(Expr::Literal(lit)),
+                                            args: None,
+                                        })));
+                                    }
+                                }
+                                _ => unimplemented!(),
+                            }
+                        }
+                    }
                     Words::Define => {
                         self.advance();
                         if let Some(next) = self.source.peek() {
@@ -56,20 +115,25 @@ where
                                         Depending on which of the previous is used will determine the syntax required,
                                         We can start by checking for the word "THAT". If it is "THAT" then we know the function takes no arguments.
                                     */
-                                    if self
-                                        .expect_and_return(Tokens::Word(Word {
-                                            which: Words::That,
-                                            plural: false,
-                                        }))
-                                        .is_some()
-                                    {
-                                        // why?
-                                        self.advance();
-                                        self.advance();
-                                        if self.expect_and_return(Tokens::Colon).is_none() {
-                                            panic!("Expected a colon.");
+                                    // todo: change this to handle the other stuff
+                                    if self.expect(Tokens::Word(Word {
+                                        which: Words::That,
+                                        plural: false,
+                                    })) {
+                                        self.expect_and_skip(vec![
+                                            Tokens::Word(Word {
+                                                which: Words::Returns,
+                                                plural: false,
+                                            }),
+                                            Tokens::Word(Word {
+                                                which: Words::A,
+                                                plural: false,
+                                            }),
+                                        ]);
+
+                                        if !self.expect(Tokens::Colon) {
+                                            panic!("Expected a colon");
                                         }
-                                        self.advance();
 
                                         let function_body = self
                                             .parse_block(BlockType::Named(func_name.clone(), 1))
@@ -204,15 +268,46 @@ where
         for token in expect {
             if let Some(current_tok) = self.source.peek() {
                 if current_tok.inner != token {
-                    println!("{:?} != {:?}", current_tok.inner, token);
-                    // self.advance(None);
-                    panic!("Expected smth else...");
+                    let mut files = SimpleFiles::new();
+                    let file_id = files.add(
+                        "module_level_func.cbt",
+                        std::fs::read_to_string("./tests/pass/module_level_func.cbt").unwrap(),
+                    );
+
+                    let diagnostic = Diagnostic::error()
+                        .with_message("Expected a different word.")
+                        .with_labels(vec![Label::primary(
+                            file_id,
+                            current_tok.location.span.clone(),
+                        )
+                        .with_message(format!(
+                            "Expected `{}` but got `{}` instead.",
+                            token.to_string(),
+                            current_tok.inner.to_string()
+                        ))])
+                        .with_notes(vec![String::from("ye?")]);
+
+                    let writer = StandardStream::stderr(ColorChoice::Always);
+                    let config = codespan_reporting::term::Config::default();
+
+                    term::emit(&mut writer.lock(), &config, &files, &diagnostic).unwrap();
+                    std::process::exit(1);
                 }
             } else {
                 panic!("Failed to get current token");
             }
-            _ = self.advance();
+            self.advance();
         }
+    }
+
+    pub fn expect(&mut self, expect: Tokens) -> bool {
+        if let Some(next) = self.source.peek() {
+            if next.inner == expect {
+                self.advance();
+                return true;
+            }
+        };
+        return false;
     }
 
     pub fn expect_and_return(&mut self, expect: Tokens) -> Option<&Token> {

@@ -1,16 +1,18 @@
 //! Codegen
 
 pub mod func;
+pub mod var;
 
 use std::{collections::HashMap, hash::Hash, iter::Peekable, ptr::null_mut};
 
 use llvm_sys::{
-    analysis::{LLVMVerifierFailureAction, LLVMVerifyModule},
+    analysis::{LLVMVerifierFailureAction, LLVMVerifyFunction, LLVMVerifyModule},
     core::{
         LLVMAddFunction, LLVMAppendBasicBlock, LLVMArrayType, LLVMBuildAlloca, LLVMBuildCall2,
-        LLVMBuildGlobalStringPtr, LLVMBuildRet, LLVMBuildRetVoid, LLVMContextCreate,
-        LLVMCreateBuilder, LLVMDisposeBuilder, LLVMDumpModule, LLVMFunctionType, LLVMInt32Type,
-        LLVMInt8Type, LLVMModuleCreateWithName, LLVMPositionBuilderAtEnd, LLVMVoidType,
+        LLVMBuildGlobalStringPtr, LLVMBuildLoad2, LLVMBuildRet, LLVMBuildRetVoid, LLVMBuildStore,
+        LLVMConstString, LLVMContextCreate, LLVMCreateBuilder, LLVMDisposeBuilder, LLVMDumpModule,
+        LLVMDumpValue, LLVMFunctionType, LLVMInt32Type, LLVMInt8Type, LLVMModuleCreateWithName,
+        LLVMPointerType, LLVMPositionBuilderAtEnd, LLVMVectorType, LLVMVoidType,
     },
     prelude::{LLVMBuilderRef, LLVMContextRef, LLVMDIBuilderRef, LLVMModuleRef, LLVMValueRef},
     LLVMContext, LLVMModule, LLVMType,
@@ -18,7 +20,7 @@ use llvm_sys::{
 
 use crate::node::{Expr, LiteralExpr, Stmt, VariableType};
 
-use self::func::Function;
+use self::{func::Function, var::Variable};
 
 macro_rules! cstr {
     ($s:expr) => {
@@ -37,6 +39,7 @@ where
     pub stmts: Peekable<T>,
     // Hashmap key is `{module}-{func-name}`
     pub functions: HashMap<String, Function>,
+    pub variables: HashMap<String, Variable>,
     pub idx: usize,
 }
 
@@ -52,17 +55,117 @@ where
             cur_module: None,
             stmts,
             functions: HashMap::new(),
+            variables: HashMap::new(),
             idx: 0,
         }
     }
 
     pub unsafe fn setup_main_module(&mut self) {
-        self.cur_module = Some(LLVMModuleCreateWithName(cstr!("main")));
+        let main_module = LLVMModuleCreateWithName(cstr!("main"));
+
+        let printf_ty = LLVMFunctionType(LLVMInt32Type(), [].as_mut_ptr(), 0, 1);
+        let printf = LLVMAddFunction(main_module, cstr!("printf"), printf_ty);
+
+        self.functions.insert(
+            "main-printf".to_string(),
+            Function {
+                entry: None,
+                ret: None,
+                ty: printf_ty,
+                func: printf,
+            },
+        );
+
+        self.cur_module = Some(main_module);
     }
 
-    pub unsafe fn visit_block(&mut self, block: Vec<Stmt>) {}
+    pub unsafe fn visit_block(&mut self, func: &Function, block: Vec<Box<Stmt>>) {
+        let mut peekable = block.into_iter().map(|e| *e).peekable();
+        while let Some(stmt) = peekable.peek() {
+            match stmt {
+                Stmt::Expr(expr) => {
+                    match expr {
+                        Expr::Call(func_call) => {
+                            let Expr::Literal(LiteralExpr::String(name)) = *func_call.func.clone() else {
+                                panic!("Expected string literal");
+                            };
+                            let Some(function) = self.functions.get(&format!("main-{name}")) else {
+                            panic!("Function {name} not defined.");
+                        };
+                            LLVMPositionBuilderAtEnd(self.builder, func.entry.unwrap());
 
-    pub unsafe fn visit_fn(&mut self, func: &Stmt) {
+                            let mut arguments: Vec<LLVMValueRef> =
+                                if let Some(args) = &func_call.args {
+                                    args.clone()
+                                .into_iter()
+                                .map(|e| match *e {
+                                    Expr::Literal(lit) => {
+                                        let LiteralExpr::String(name) = lit;
+                                        let Some(variable_ptr) = self.variables.get(&name) else {
+                                            panic!("Undefined var.");
+                                        };
+                                        variable_ptr.ptr
+                                        // doesn't like to load stuff?
+                                        //LLVMBuildLoad2(self.builder, variable_ptr.ty, variable_ptr.ptr, cstr!("".as_bytes()))
+                                    }
+                                    _ => unimplemented!(),
+                                })
+                                .collect::<Vec<LLVMValueRef>>()
+                                } else {
+                                    Vec::new()
+                                };
+
+                            LLVMBuildCall2(
+                                self.builder,
+                                function.ty,
+                                function.func,
+                                arguments.as_mut_ptr(),
+                                arguments.len() as u32,
+                                cstr!("".as_bytes()),
+                            );
+                        }
+                        _ => {}
+                    }
+                }
+                Stmt::Variable { name, ty, value } => {
+                    let value = match value {
+                        Some(inner) => match inner {
+                            Expr::Literal(literal) => match literal {
+                                LiteralExpr::String(value) => value,
+                            },
+                            _ => todo!(),
+                        },
+                        None => todo!(),
+                    };
+                    let var_type = match ty {
+                        VariableType::String => LLVMArrayType(
+                            LLVMInt8Type(),
+                            std::mem::size_of_val(value.as_bytes()) as u32,
+                        ),
+                    };
+                    LLVMPositionBuilderAtEnd(self.builder, func.entry.unwrap());
+                    let alloc = LLVMBuildAlloca(self.builder, var_type, cstr!(name.as_bytes()));
+                    let val = LLVMConstString(
+                        cstr!(value.as_bytes()),
+                        std::mem::size_of_val(value.as_bytes()) as u32,
+                        1,
+                    );
+                    LLVMBuildStore(self.builder, val, alloc);
+                    self.variables.insert(
+                        name.to_string(),
+                        Variable {
+                            ptr: alloc,
+                            ty: var_type,
+                        },
+                    );
+                }
+                _ => {}
+            };
+            peekable.next();
+        }
+    }
+
+    pub unsafe fn visit_fn(&mut self, func: Stmt) {
         if let Some(current_module) = self.cur_module {
             let Stmt::Function { name, nodes } = func else {
                 panic!("Not a function");
@@ -72,24 +175,24 @@ where
             let main_func = LLVMAddFunction(current_module, cstr!(name.as_bytes()), main_ty);
 
             let entry = LLVMAppendBasicBlock(main_func, cstr!("entry"));
+            // let ret = LLVMAppendBasicBlock(main_func, cstr!("return"));
 
-            LLVMPositionBuilderAtEnd(self.builder, entry);
+            let function = Function {
+                entry: Some(entry),
+                ret: None,
+                ty: main_ty,
+                func: main_func,
+            };
+
+            match *nodes {
+                Stmt::Block(stmts) => self.visit_block(&function, stmts),
+                _ => panic!("Expected a block?"),
+            }
+
+            LLVMPositionBuilderAtEnd(self.builder, function.entry.unwrap());
             LLVMBuildRetVoid(self.builder);
 
-            let ret = LLVMAppendBasicBlock(main_func, cstr!("return"));
-
-            LLVMPositionBuilderAtEnd(self.builder, ret);
-            LLVMBuildRetVoid(self.builder);
-
-            self.functions.insert(
-                format!("main-{}", name),
-                Function {
-                    entry,
-                    ret,
-                    ty: main_ty,
-                    func: main_func,
-                },
-            );
+            self.functions.insert(format!("main-{}", name), function);
         }
     }
 
@@ -111,99 +214,3 @@ where
         }
     }
 }
-
-// MODULES ARE IGNORED FOR NOW
-// pub unsafe fn codegen(nodes: Vec<Stmt>) {
-//     let printf_ty = LLVMFunctionType(LLVMInt32Type(), [].as_mut_ptr(), 0, 1);
-//     let main_ty = LLVMFunctionType(LLVMInt32Type(), [].as_mut_ptr(), 0, 0);
-
-//     let mut nodes = nodes.into_iter().peekable();
-
-//     let main_mod = LLVMModuleCreateWithName(cstr!("main"));
-
-//     let builder = LLVMCreateBuilder();
-
-//     // add print function
-//     let printf = LLVMAddFunction(main_mod, cstr!("printf"), printf_ty);
-//     pub struct Function {
-//         pub ty: *mut llvm_sys::LLVMType,
-//         pub func: *mut llvm_sys::LLVMValue,
-//     }
-
-//     let mut functions: Vec<Function> = Vec::new();
-//     let mut variables: Vec<LLVMValueRef> = Vec::new();
-//     while let Some(node) = nodes.peek() {
-//         match node {
-//             Stmt::Variable { name, ty, value } => {
-//                 if ty == &VariableType::String {
-//                     let Some(Expr::Literal(LiteralExpr::String(value))) = value else {
-//                         panic!("Variable expression does not match type.");
-//                     };
-//                     // let value = cstr!(value.as_bytes());
-//                     let ptr = LLVMBuildAlloca(
-//                         builder,
-//                         LLVMArrayType(LLVMInt8Type(), 1),
-//                         cstr!(name.as_bytes()),
-//                     );
-//                 }
-//                 nodes.next();
-//             }
-//             Stmt::Function { name, nodes } => {
-//                 let LiteralExpr::String(func_name) = name;
-//                 let func_ty = LLVMFunctionType(LLVMInt32Type(), [].as_mut_ptr(), 0, 1);
-
-//                 let func = LLVMAddFunction(main_mod, cstr!(func_name.as_bytes()), func_ty);
-
-//                 let func_block = LLVMAppendBasicBlock(func, cstr!("entry"));
-//                 LLVMPositionBuilderAtEnd(builder, func_block);
-
-//                 let call = LLVMBuildCall2(
-//                     builder,
-//                     printf_ty,
-//                     printf,
-//                     [].as_mut_ptr(),
-//                     0 as u32,
-//                     cstr!("func_printf_call"),
-//                 );
-
-//                 LLVMBuildRet(builder, call);
-//                 functions.push(Function { ty: func_ty, func });
-//                 // Later on there will be actual eval here or something like that but for no there is not. Hold the L.
-//             }
-//             _ => {}
-//         }
-//         nodes.next();
-//     }
-
-//     let main_func = LLVMAddFunction(main_mod, cstr!("main"), main_ty);
-
-//     let main_func_block = LLVMAppendBasicBlock(main_func, cstr!("entry"));
-//     LLVMPositionBuilderAtEnd(builder, main_func_block);
-
-//     let mut calls = Vec::new();
-//     if functions.len() > 0 {
-//         for func in functions {
-//             let call = LLVMBuildCall2(
-//                 builder,
-//                 func.ty,
-//                 func.func,
-//                 variables.as_mut_ptr(),
-//                 variables.len() as u32,
-//                 cstr!("call_anon_func"),
-//             );
-//             calls.push(call);
-//         }
-//     }
-
-//     if let Some(last) = calls.last() {
-//         LLVMBuildRet(builder, *last);
-//     }
-//     LLVMDumpModule(main_mod);
-//     LLVMVerifyModule(
-//         main_mod,
-//         LLVMVerifierFailureAction::LLVMAbortProcessAction,
-//         std::ptr::null_mut(),
-//     );
-//     llvm_sys::core::LLVMPrintModuleToFile(main_mod, cstr!("cbt.ll"), null_mut());
-//     LLVMDisposeBuilder(builder);
-// }

@@ -4,8 +4,8 @@ use llvm_sys::{
 };
 
 pub struct Function {
-    pub entry: LLVMBasicBlockRef,
-    pub ret: LLVMBasicBlockRef,
+    pub entry: Option<LLVMBasicBlockRef>,
+    pub ret: Option<LLVMBasicBlockRef>,
     pub ty: *mut LLVMType,
     pub func: LLVMValueRef,
 }
