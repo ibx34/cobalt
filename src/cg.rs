@@ -137,16 +137,21 @@ where
                         },
                         None => todo!(),
                     };
+
+                    let mut value = value.to_owned();
+                    value.push('\0');
+
                     let var_type = match ty {
                         VariableType::String => LLVMArrayType(
                             LLVMInt8Type(),
                             std::mem::size_of_val(value.as_bytes()) as u32,
                         ),
                     };
+
                     LLVMPositionBuilderAtEnd(self.builder, func.entry.unwrap());
                     let alloc = LLVMBuildAlloca(self.builder, var_type, cstr!(name.as_bytes()));
                     let val = LLVMConstString(
-                        cstr!(value.as_bytes()),
+                        value.as_bytes().as_ptr() as *const i8,
                         std::mem::size_of_val(value.as_bytes()) as u32,
                         1,
                     );
