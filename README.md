@@ -24,7 +24,8 @@ Ye, it doesn't do much.
 
 ## Using
 
-> **Info** The officially supported extensions are `.cbt` and `.cobalt`. However, it doesn't matter what you use.   
+> **Note**
+> The officially supported extensions are `.cbt` and `.cobalt`. However, it doesn't matter what you use.   
 
 **This version of Cobalt will ONLY run the tests specified in `/tests`. To play around with the code you MUST create a file here.**
 
