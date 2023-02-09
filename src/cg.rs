@@ -11,15 +11,21 @@ use llvm_sys::{
         LLVMAddFunction, LLVMAppendBasicBlock, LLVMArrayType, LLVMBuildAlloca, LLVMBuildBitCast,
         LLVMBuildCall2, LLVMBuildCondBr, LLVMBuildFCmp, LLVMBuildGlobalStringPtr, LLVMBuildICmp,
         LLVMBuildLoad2, LLVMBuildPtrDiff2, LLVMBuildRet, LLVMBuildRetVoid, LLVMBuildStore,
-        LLVMConstInt, LLVMConstString, LLVMContextCreate, LLVMCreateBuilder, LLVMDisposeBuilder,
-        LLVMDumpModule, LLVMDumpValue, LLVMFunctionType, LLVMGetArrayLength,
+        LLVMConstInt, LLVMConstString, LLVMContextCreate, LLVMCreateBuilder, LLVMCreatePassManager,
+        LLVMDisposeBuilder, LLVMDumpModule, LLVMDumpValue, LLVMFunctionType, LLVMGetArrayLength,
         LLVMGetPointerAddressSpace, LLVMInt16Type, LLVMInt1Type, LLVMInt32Type, LLVMInt8Type,
-        LLVMModuleCreateWithName, LLVMPointerType, LLVMPositionBuilderAtEnd, LLVMVectorType,
-        LLVMVoidType,
+        LLVMModuleCreateWithName, LLVMPointerType, LLVMPositionBuilderAtEnd, LLVMPrintModuleToFile,
+        LLVMRunPassManager, LLVMVectorType, LLVMVoidType,
     },
     prelude::{
         LLVMBasicBlockRef, LLVMBuilderRef, LLVMContextRef, LLVMDIBuilderRef, LLVMModuleRef,
         LLVMValueRef,
+    },
+    target_machine::LLVMCodeGenOptLevel,
+    transforms::pass_manager_builder::{
+        LLVMPassManagerBuilderCreate, LLVMPassManagerBuilderDispose,
+        LLVMPassManagerBuilderPopulateFunctionPassManager,
+        LLVMPassManagerBuilderPopulateModulePassManager, LLVMPassManagerBuilderSetOptLevel,
     },
     LLVMContext, LLVMIntPredicate, LLVMModule, LLVMRealPredicate, LLVMType,
 };
@@ -373,13 +379,26 @@ where
 
     pub unsafe fn verify_and_dump(&self) {
         if let Some(current_module) = self.cur_module {
-            LLVMDumpModule(current_module);
+            let pm = LLVMCreatePassManager();
+            let pmb = LLVMPassManagerBuilderCreate();
+            LLVMPassManagerBuilderSetOptLevel(
+                pmb,
+                LLVMCodeGenOptLevel::LLVMCodeGenLevelAggressive as u32,
+            );
+            LLVMPassManagerBuilderPopulateFunctionPassManager(pmb, pm);
+            LLVMPassManagerBuilderPopulateModulePassManager(pmb, pm);
+
             LLVMVerifyModule(
                 current_module,
                 LLVMVerifierFailureAction::LLVMAbortProcessAction,
                 std::ptr::null_mut(),
             );
-            llvm_sys::core::LLVMPrintModuleToFile(current_module, cstr!("cbt.ll"), null_mut());
+
+            LLVMRunPassManager(pm, current_module);
+
+            LLVMPrintModuleToFile(current_module, cstr!("cbt.ll"), null_mut());
+
+            LLVMPassManagerBuilderDispose(pmb);
             LLVMDisposeBuilder(self.builder);
         }
     }

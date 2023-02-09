@@ -267,7 +267,6 @@ fn main() {
         source_str: lexer.source,
     };
     parser.parse();
-    println!("{:#?}", parser.nodes);
     unsafe {
         //cg::codegen(parser.nodes);
         let mut codegen = cg::CodeGen::init(parser.nodes.into_iter().peekable());
