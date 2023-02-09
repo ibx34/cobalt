@@ -10,9 +10,30 @@ pub struct FunctionCall {
 }
 
 #[derive(Debug, Clone)]
+/// This is short hand for a phrase (like `EQUAL TO`)
+pub enum BinaryOperators {
+    EqualTo,
+}
+
+#[derive(Debug, Clone)]
+pub struct Binary {
+    pub l: Box<Expr>,
+    pub r: Box<Expr>,
+    pub op: BinaryOperators,
+}
+
+#[derive(Debug, Clone)]
+pub struct Condition {
+    pub then: Box<Stmt>,
+    pub el: Option<Box<Stmt>>,
+    pub condition: Box<Expr>,
+}
+
+#[derive(Debug, Clone)]
 pub enum Expr {
     Literal(LiteralExpr),
     Call(FunctionCall),
+    BinaryOp(Binary),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -20,7 +41,7 @@ pub enum VariableType {
     String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Stmt {
     Block(Vec<Box<Stmt>>),
     Module {
@@ -37,6 +58,5 @@ pub enum Stmt {
         name: LiteralExpr,
         nodes: Box<Stmt>,
     },
-    // Just for now
-    Token(crate::Tokens),
+    Condition(Condition),
 }

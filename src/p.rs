@@ -4,7 +4,8 @@ use codespan_reporting::term;
 use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
 use std::iter::Peekable;
 
-use crate::node::FunctionCall;
+use crate::cg::var;
+use crate::node::{Binary, BinaryOperators, Condition, FunctionCall};
 use crate::{
     errors::ErrorClient,
     node::{Expr, LiteralExpr, Stmt, VariableType},
@@ -13,6 +14,7 @@ use crate::{
 
 pub enum BlockType {
     Named(String, usize),
+    Unamed(usize),
 }
 
 pub struct Parser<T>
@@ -34,11 +36,80 @@ where
             self.nodes.push(stmt);
         }
     }
+    pub fn parse_expr(&mut self) -> Option<Expr> {
+        if let Some(current) = self.source.peek() {
+            match current.inner {
+                Tokens::String => {
+                    let Some(lit) = self.parse_string() else {
+                        panic!("Failed to parse function name");
+                    };
+                    self.advance();
+                    return Some(lit);
+                }
+                _ => {
+                    panic!("Unsupported.")
+                }
+            }
+        }
+        None
+    }
     pub fn parse_stmt(&mut self) -> Option<Stmt> {
         if let Some(current) = self.source.peek() {
             match &current.inner {
-                Tokens::DollarSign => return Some(Stmt::Token(Tokens::DollarSign)),
                 Tokens::Word(word) => match word.which {
+                    Words::If => {
+                        self.advance();
+
+                        let Some(left) = self.parse_expr() else {panic!("failed")};
+                        let op = if self.expect(Tokens::Word(Word {
+                            which: Words::Is,
+                            plural: false,
+                        })) {
+                            let (r1, r2) = (
+                                self.expect(Tokens::Word(Word {
+                                    which: Words::Equal,
+                                    plural: false,
+                                })),
+                                self.expect(Tokens::Word(Word {
+                                    which: Words::To,
+                                    plural: false,
+                                })),
+                            );
+
+                            if r1 && r2 {
+                                BinaryOperators::EqualTo
+                            } else {
+                                panic!("Unsupported operator");
+                            }
+                        } else {
+                            panic!("Unsupported operator");
+                        };
+                        let Some(right) = self.parse_expr() else {panic!("failed")};
+
+                        self.expect_and_skip(vec![
+                            Tokens::Word(Word {
+                                which: Words::Then,
+                                plural: false,
+                            }),
+                            Tokens::Word(Word {
+                                which: Words::Do,
+                                plural: false,
+                            }),
+                        ]);
+
+                        let Some(then) = self.parse_block(BlockType::Unamed(0)) else {
+                            panic!("Failed to parse if block");
+                        };
+                        return Some(Stmt::Condition(Condition {
+                            then: Box::new(then),
+                            el: None,
+                            condition: Box::new(Expr::BinaryOp(Binary {
+                                l: Box::new(left),
+                                r: Box::new(right),
+                                op,
+                            })),
+                        }));
+                    }
                     Words::Call => {
                         self.advance();
                         if let Some(next) = self.source.peek() {
@@ -48,7 +119,7 @@ where
                             match word.which {
                                 Words::Function => {
                                     self.advance();
-                                    let Some(Stmt::Expr(Expr::Literal(lit))) = self.parse_string() else {
+                                    let Some(Expr::Literal(lit)) = self.parse_string() else {
                                         panic!("Failed to parse function name");
                                     };
                                     self.advance();
@@ -67,7 +138,7 @@ where
                                             })]);
 
                                             // TODO: make a parse_expr function to make stuff like this WAY easier.
-                                            let Some(Stmt::Expr(Expr::Literal(only_arg))) = self.parse_string() else {
+                                            let Some(Expr::Literal(only_arg)) = self.parse_string() else {
                                                 panic!("Failed to parse function name");
                                             };
                                             self.advance();
@@ -102,7 +173,7 @@ where
                             match word.which {
                                 Words::Function => {
                                     self.advance();
-                                    let Some(Stmt::Expr(Expr::Literal(LiteralExpr::String(func_name)))) = self.parse_string() else {
+                                    let Some(Expr::Literal(LiteralExpr::String(func_name))) = self.parse_string() else {
                                         panic!("Failed to parse function name");
                                     };
                                     self.advance();
@@ -136,9 +207,11 @@ where
                                             panic!("Expected a colon");
                                         }
 
-                                        let function_body = self
+                                        let Some(function_body) = self
                                             .parse_block(BlockType::Named(func_name.clone(), 1))
-                                            .unwrap();
+                                            else {
+                                                panic!("Failed to get function body.");
+                                            };
                                         return Some(Stmt::Function {
                                             name: LiteralExpr::String(func_name),
                                             nodes: Box::new(function_body),
@@ -147,7 +220,7 @@ where
                                 }
                                 Words::Module => {
                                     self.advance();
-                                    let Some(Stmt::Expr(Expr::Literal(LiteralExpr::String(module_name)))) = self.parse_string() else {
+                                    let Some(Expr::Literal(LiteralExpr::String(module_name))) = self.parse_string() else {
                                         panic!("Failed to parse module name");
                                     };
                                     self.advance();
@@ -177,7 +250,7 @@ where
                     }
                     Words::Set => {
                         self.advance();
-                        let Some(Stmt::Expr(Expr::Literal(LiteralExpr::String(variable_name)))) = self.parse_string() else {
+                        let Some(Expr::Literal(LiteralExpr::String(variable_name))) = self.parse_string() else {
                             panic!("Failed to parse module name");
                         };
                         self.advance();
@@ -191,7 +264,7 @@ where
                                 plural: false,
                             }),
                         ]);
-                        let Some(Stmt::Expr(expr)) = self.parse_string() else {
+                        let Some(expr) = self.parse_string() else {
                             panic!("Failed to parse module name");
                         };
                         self.advance();
@@ -240,7 +313,7 @@ where
                             panic!("Expected word");
                         };
                         self.advance();
-                        let Some(Stmt::Expr(Expr::Literal(LiteralExpr::String(name2)))) = self.parse_string() else {
+                        let Some(Expr::Literal(LiteralExpr::String(name2))) = self.parse_string() else {
                             panic!("Expected module name");
                         };
                         if name2 != name {
@@ -252,6 +325,15 @@ where
                         }
                         self.advance();
                     }
+                    BlockType::Unamed(version) => {
+                        if version == 0 {
+                            self.expect_and_skip(vec![Tokens::Word(Word {
+                                which: Words::If,
+                                plural: false,
+                            })]);
+                            self.advance();
+                        }
+                    }
                 }
                 break;
             }
@@ -259,7 +341,6 @@ where
             if let Some(stmt) = self.parse_stmt() {
                 nodes.push(Box::new(stmt))
             }
-
             self.advance();
         }
         return Some(Stmt::Block(nodes));
@@ -312,7 +393,7 @@ where
         None
     }
 
-    pub fn parse_string(&mut self) -> Option<Stmt> {
+    pub fn parse_string(&mut self) -> Option<Expr> {
         if let Some(current) = self.source.peek() {
             if current.inner != Tokens::String {
                 println!("{current:?} IS NOT A STRING");
@@ -323,7 +404,7 @@ where
                 return None;
             };
             let string = string.iter().collect::<String>();
-            return Some(Stmt::Expr(Expr::Literal(LiteralExpr::String(string))));
+            return Some(Expr::Literal(LiteralExpr::String(string)));
         }
         None
     }

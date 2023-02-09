@@ -30,6 +30,9 @@ pub enum Words {
     Returns,
     Contains,
     Display,
+    If,
+    Then,
+    Do,
 }
 
 impl TryFrom<&str> for Words {
@@ -55,6 +58,9 @@ impl TryFrom<&str> for Words {
             "that" => Ok(Self::That),
             "returns" => Ok(Self::Returns),
             "display" => Ok(Self::Display),
+            "if" => Ok(Self::If),
+            "then" => Ok(Self::Then),
+            "do" => Ok(Self::Do),
             _ => Err(String::from("Ye bad")),
         }
     }
@@ -82,6 +88,9 @@ impl From<Words> for String {
             Words::Contains => "contains",
             Words::Returns => "returns",
             Words::Display => "display",
+            Words::If => "if",
+            Words::Then => "then",
+            Words::Do => "do",
         }
         .to_ascii_uppercase()
     }
@@ -258,7 +267,7 @@ fn main() {
         source_str: lexer.source,
     };
     parser.parse();
-
+    println!("{:#?}", parser.nodes);
     unsafe {
         //cg::codegen(parser.nodes);
         let mut codegen = cg::CodeGen::init(parser.nodes.into_iter().peekable());

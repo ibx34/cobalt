@@ -6,4 +6,5 @@ use llvm_sys::{
 pub struct Variable {
     pub ptr: LLVMValueRef,
     pub ty: *mut LLVMType,
+    pub size: u32,
 }

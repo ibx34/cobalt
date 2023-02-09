@@ -1,6 +1,13 @@
 DEFINE FUNCTION "test_func_call" THAT RETURNS A: 
 
-    SET "to_print" EQUAL TO "what?".
+    SET "to_print" EQUAL TO "Hello, world!".
+    SET "is_snoot_cute" EQUAL TO "yes".
+
+    IF "is_snoot_cute" IS EQUAL TO "yes" THEN DO
+        SET "conditional_pass" EQUAL TO "Snoot is cute!".
+        CALL FUNCTION "printf" WITH THE ARGUMENT "conditional_pass".
+    END IF.
+    
     CALL FUNCTION "printf" WITH THE ARGUMENT "to_print".
 
 END FUNCTION "test_func_call".
