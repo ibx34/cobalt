@@ -3,6 +3,8 @@
 <a href="https://discord.gg/bVmkQTKrqm">Discord</a>
 </ol>
 
+> **Warning**
+> To compile and use Cobalt on windows you will need to follow this [StackOverflow](https://stackoverflow.com/a/60024490/13098065) post
 
 Ye, im just as confused as you... Who made this? Who thought cobol was a good idea? Is this good? Who knows.
 Here is an example :) (Please note this language is REALLY NEW :) so lets not get too excited.)  
