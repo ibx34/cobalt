@@ -1,0 +1,22 @@
+DEFINE FUNCTION "test_func_call" THAT RETURNS A: 
+
+    SET "to_print" EQUAL TO "Hello, world!".
+    SET "conditional" EQUAL TO "yes".
+
+    SET "boolean" EQUAL TO true.
+    SET "boolean2" EQUAL TO true.
+
+    IF "conditional" IS EQUAL TO "yes" THEN DO
+        SET "conditional_pass" EQUAL TO "It was yes!".
+        CALL FUNCTION "printf" WITH THE ARGUMENT "conditional_pass".
+    END IF.
+    
+    CALL FUNCTION "printf" WITH THE ARGUMENT "to_print".
+
+END FUNCTION "test_func_call".
+
+DEFINE FUNCTION "main" THAT RETURNS A: 
+
+    CALL FUNCTION "test_func_call".
+
+END FUNCTION "main".
