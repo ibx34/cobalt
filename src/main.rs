@@ -33,6 +33,8 @@ pub enum Words {
     If,
     Then,
     Do,
+    True,
+    False,
 }
 
 impl TryFrom<&str> for Words {
@@ -61,6 +63,8 @@ impl TryFrom<&str> for Words {
             "if" => Ok(Self::If),
             "then" => Ok(Self::Then),
             "do" => Ok(Self::Do),
+            "true" => Ok(Self::True),
+            "false" => Ok(Self::False),
             _ => Err(String::from("Ye bad")),
         }
     }
@@ -91,6 +95,8 @@ impl From<Words> for String {
             Words::If => "if",
             Words::Then => "then",
             Words::Do => "do",
+            Words::True => "true",
+            Words::False => "false",
         }
         .to_ascii_uppercase()
     }
@@ -252,29 +258,34 @@ impl Lexer {
 fn main() {
     let input_str = std::fs::read_to_string("tests/pass/module_level_func.cbt").unwrap();
 
-    let mut lexer = Lexer {
-        source: input_str.chars().collect(),
-        results: ast::AST { ast: vec![] },
-        idx: 0,
-    };
+    let mut lexer = cbt_lexer::Lexer::init(&input_str, "module_level_func.cbt");
+    lexer.lex_all().unwrap();
 
-    lexer.lex_all();
+    let mut parser = cbt_parser::Parser::init(lexer.tokens, lexer.ctx);
+    parser.verify_file_prefix();
+    // let mut lexer = Lexer {
+    //     source: input_str.chars().collect(),
+    //     results: ast::AST { ast: vec![] },
+    //     idx: 0,
+    // };
 
-    let mut parser = p::Parser {
-        source: lexer.results.ast.into_iter().peekable(),
-        idx: 0,
-        nodes: vec![],
-        source_str: lexer.source,
-    };
-    parser.parse();
-    unsafe {
-        //cg::codegen(parser.nodes);
-        let mut codegen = cg::CodeGen::init(parser.nodes.into_iter().peekable());
-        codegen.setup_main_module();
-        let func = codegen.stmts.next().unwrap();
-        codegen.visit_fn(func);
-        let func = codegen.stmts.next().unwrap();
-        codegen.visit_fn(func);
-        codegen.verify_and_dump();
-    }
+    // lexer.lex_all();
+
+    // let mut parser = p::Parser {
+    //     source: lexer.results.ast.into_iter().peekable(),
+    //     idx: 0,
+    //     nodes: vec![],
+    //     source_str: lexer.source,
+    // };
+    // parser.parse();
+    // unsafe {
+    //     //cg::codegen(parser.nodes);
+    //     let mut codegen = cg::CodeGen::init(parser.nodes.into_iter().peekable());
+    //     codegen.setup_main_module();
+    //     let func = codegen.stmts.next().unwrap();
+    //     codegen.visit_fn(func);
+    //     let func = codegen.stmts.next().unwrap();
+    //     codegen.visit_fn(func);
+    //     codegen.verify_and_dump();
+    // }
 }

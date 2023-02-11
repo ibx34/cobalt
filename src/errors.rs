@@ -81,10 +81,13 @@ impl<'a> ErrorClient<'a> {
     }
 
     pub fn build_and_emit(self) {
-        let diagnostic = Diagnostic::error()
-            .with_code(format!("E{}", self.error_code))
-            .with_labels(self.labels)
-            .with_message(self.error.0);
+        let diagnostic = match self.kind {
+            MessageKind::ERROR => Diagnostic::error(),
+            MessageKind::WARNING => Diagnostic::warning(),
+        };
+        let diagnostic = diagnostic.with_code(format!("E{}", self.error_code));
+        let diagnostic = diagnostic.with_labels(self.labels);
+        let diagnostic = diagnostic.with_message(self.error.0);
 
         let diagnostic = if self.notes.len() > 0 {
             diagnostic.with_notes(

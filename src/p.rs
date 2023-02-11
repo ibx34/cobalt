@@ -38,15 +38,29 @@ where
     }
     pub fn parse_expr(&mut self) -> Option<Expr> {
         if let Some(current) = self.source.peek() {
-            match current.inner {
+            match &current.inner {
+                Tokens::Word(word) => {
+                    if vec![Words::False, Words::True].contains(&word.which) {
+                        let variant = match word.which {
+                            Words::False => false,
+                            Words::True => true,
+                            _ => unreachable!()
+                        };
+                        self.advance();
+                        return Some(Expr::Literal(LiteralExpr::Bool(variant)))
+                    }
+                },
                 Tokens::String => {
-                    let Some(lit) = self.parse_string() else {
-                        panic!("Failed to parse function name");
+                    let Some(string) = self.source_str.get(current.location.span.clone()) else {
+                        println!("Non existant location");
+                        return None;
                     };
+                    let string = string.into_iter().collect::<String>().to_lowercase();
                     self.advance();
-                    return Some(lit);
+                    return Some(Expr::Literal(LiteralExpr::String(string)));
                 }
                 _ => {
+                    println!("{:?}", current);
                     panic!("Unsupported.")
                 }
             }
@@ -136,7 +150,7 @@ where
                                                 which: Words::Argument,
                                                 plural: false,
                                             })]);
-
+                                            
                                             // TODO: make a parse_expr function to make stuff like this WAY easier.
                                             let Some(Expr::Literal(only_arg)) = self.parse_string() else {
                                                 panic!("Failed to parse function name");
@@ -264,17 +278,20 @@ where
                                 plural: false,
                             }),
                         ]);
-                        let Some(expr) = self.parse_string() else {
+                        let Some(expr) = self.parse_expr() else {
                             panic!("Failed to parse module name");
                         };
-                        self.advance();
                         if self.expect_and_return(Tokens::Period).is_none() {
                             panic!("END WITH A PERIOD DAMNIT.")
                         }
                         return Some(Stmt::Variable {
                             name: variable_name,
-                            value: Some(expr),
-                            ty: VariableType::String,
+                            value: Some(expr.clone()),
+                            ty: match expr {
+                                Expr::Literal(LiteralExpr::Bool(_)) => VariableType::Bool,
+                                Expr::Literal(LiteralExpr::String(_)) => VariableType::String,
+                                _ => panic!("Unexpected expression")
+                            },
                         });
                     }
                     _ => {}

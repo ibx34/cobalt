@@ -3,7 +3,7 @@
 pub mod func;
 pub mod var;
 
-use std::{collections::HashMap, hash::Hash, iter::Peekable, ptr::null_mut};
+use std::{any::Any, collections::HashMap, hash::Hash, iter::Peekable, ptr::null_mut};
 
 use llvm_sys::{
     analysis::{LLVMVerifierFailureAction, LLVMVerifyFunction, LLVMVerifyModule},
@@ -13,13 +13,14 @@ use llvm_sys::{
         LLVMBuildLoad2, LLVMBuildPtrDiff2, LLVMBuildRet, LLVMBuildRetVoid, LLVMBuildStore,
         LLVMConstInt, LLVMConstString, LLVMContextCreate, LLVMCreateBuilder, LLVMCreatePassManager,
         LLVMDisposeBuilder, LLVMDumpModule, LLVMDumpValue, LLVMFunctionType, LLVMGetArrayLength,
-        LLVMGetPointerAddressSpace, LLVMInt16Type, LLVMInt1Type, LLVMInt32Type, LLVMInt8Type,
-        LLVMModuleCreateWithName, LLVMPointerType, LLVMPositionBuilderAtEnd, LLVMPrintModuleToFile,
-        LLVMRunPassManager, LLVMVectorType, LLVMVoidType,
+        LLVMGetPointerAddressSpace, LLVMGlobalGetValueType, LLVMInt16Type, LLVMInt1Type,
+        LLVMInt32Type, LLVMInt8Type, LLVMModuleCreateWithName, LLVMPointerType,
+        LLVMPositionBuilderAtEnd, LLVMPrintModuleToFile, LLVMRunPassManager, LLVMVectorType,
+        LLVMVoidType,
     },
     prelude::{
         LLVMBasicBlockRef, LLVMBuilderRef, LLVMContextRef, LLVMDIBuilderRef, LLVMModuleRef,
-        LLVMValueRef,
+        LLVMTypeRef, LLVMValueRef,
     },
     target_machine::LLVMCodeGenOptLevel,
     transforms::pass_manager_builder::{
@@ -112,6 +113,38 @@ where
         self.cur_module = Some(main_module);
     }
 
+    pub unsafe fn build_str_ptr(&self, value: String) -> (LLVMValueRef, u32, LLVMTypeRef) {
+        let mut value = value.to_owned();
+        value.push('\0');
+
+        let size = std::mem::size_of_val(value.as_bytes()) as u32;
+        let ty = LLVMArrayType(LLVMInt8Type(), size);
+
+        let ptr = LLVMBuildAlloca(self.builder, ty, cstr!(""));
+        let val = LLVMConstString(value.as_bytes().as_ptr() as *const i8, size, 1);
+        LLVMBuildStore(self.builder, val, ptr);
+        (ptr, size, ty)
+    }
+
+    pub unsafe fn build_int_ptr(
+        &self,
+        ty: LLVMTypeRef,
+        int: libc::c_ulonglong,
+    ) -> (LLVMValueRef, u32, LLVMTypeRef) {
+        let ptr = LLVMBuildAlloca(self.builder, ty, cstr!(""));
+        let val = LLVMConstInt(ty, int, 1);
+        LLVMBuildStore(self.builder, val, ptr);
+        (ptr, 1, ty)
+    }
+
+    pub unsafe fn create_string_var(&mut self, name: &str, value: String) -> Variable {
+        let (ptr, size, ty) = self.build_str_ptr(value);
+        let variable = Variable { size, ptr, ty };
+        self.variables
+            .insert(name.to_owned(), Variable { size, ptr, ty });
+        variable
+    }
+
     pub unsafe fn visit_block(
         &mut self,
         func: &Function,
@@ -126,54 +159,25 @@ where
                         panic!("Incorrect expr type");
                     };
 
-                    // TODO: handle other expression types here.
-                    let (Expr::Literal(LiteralExpr::String(left)), Expr::Literal(LiteralExpr::String(right))) =
-                        (*inner_cond.l, *inner_cond.r) else {
-                            panic!("Incorrect left and right operands.");
-                        };
-
-                    // I AM VERY AWARE THIS IS BAD ... it will be fixed soon:tm:
-                    let left = if let Some(var) = self.variables.get(&left) {
-                        var.ptr
-                    } else {
-                        let mut value = left.to_owned();
-                        value.push('\0');
-
-                        let alloc = LLVMBuildAlloca(
-                            self.builder,
-                            LLVMArrayType(
-                                LLVMInt8Type(),
-                                std::mem::size_of_val(value.as_bytes()) as u32,
-                            ),
-                            cstr!(""),
-                        );
-                        let val = LLVMConstString(
-                            value.as_bytes().as_ptr() as *const i8,
-                            std::mem::size_of_val(value.as_bytes()) as u32,
-                            1,
-                        );
-                        LLVMBuildStore(self.builder, val, alloc);
-                        alloc
+                    let generate_tmp_val_ptr = |expr: Expr| match expr {
+                        Expr::Literal(LiteralExpr::String(str)) => Some(
+                            self.variables
+                                .get(&str)
+                                .and_then(|v| Some((v.ptr, v.size, v.ty)))
+                                .unwrap_or(self.build_str_ptr(str)),
+                        ),
+                        Expr::Literal(LiteralExpr::Bool(bool)) => {
+                            Some(self.build_int_ptr(LLVMInt1Type(), bool.into()))
+                        }
+                        _ => None,
                     };
 
-                    let right = if let Some(var) = self.variables.get(&right) {
-                        var.ptr
-                    } else {
-                        let mut value = right.to_owned();
-                        value.push('\0');
-                        let ty = LLVMArrayType(
-                            LLVMInt8Type(),
-                            std::mem::size_of_val(value.as_bytes()) as u32,
-                        );
-                        let alloc = LLVMBuildAlloca(self.builder, ty, cstr!(""));
-                        let val = LLVMConstString(
-                            value.as_bytes().as_ptr() as *const i8,
-                            std::mem::size_of_val(value.as_bytes()) as u32,
-                            1,
-                        );
-                        LLVMBuildStore(self.builder, val, alloc);
-                        alloc
-                    };
+                    let (left, size1, ty1) = generate_tmp_val_ptr(*inner_cond.l).unwrap();
+                    let (right, size2, ty2) = generate_tmp_val_ptr(*inner_cond.r).unwrap();
+
+                    if ty1 != ty2 {
+                        panic!("Missmatched types");
+                    }
 
                     //let icmp = LLVMBuildICmp(self.builder, op_ty, left, right, cstr!("if-cond"));
                     if let Some(strcmp) = self.functions.get("main-strcmp") {
@@ -254,7 +258,9 @@ where
                                 .into_iter()
                                 .map(|e| match *e {
                                     Expr::Literal(lit) => {
-                                        let LiteralExpr::String(name) = lit;
+                                        let LiteralExpr::String(name) = lit else {
+                                            panic!("Incorrect literal")
+                                        };
                                         let Some(variable_ptr) = self.variables.get(&name) else {
                                             panic!("Undefined var {:?}.", name);
                                         };
@@ -299,42 +305,61 @@ where
         variable: Stmt,
     ) {
         if let Stmt::Variable { name, ty, value } = variable {
-            let value = match value {
+            let var_type = match ty {
+                VariableType::String => {
+                    let Some(Expr::Literal(LiteralExpr::String(value))) = value.clone() else {
+                        panic!("Expected a string literal.");
+                    };
+                    LLVMArrayType(
+                        LLVMInt8Type(),
+                        std::mem::size_of_val(value.as_bytes()) as u32 + 1,
+                    )
+                }
+                VariableType::Bool => {
+                    // Booleans are a single int: 1 or 0
+                    LLVMInt1Type()
+                }
+            };
+
+            LLVMPositionBuilderAtEnd(self.builder, specific_bb.unwrap_or(func.entry.unwrap()));
+            let alloc = LLVMBuildAlloca(self.builder, var_type, cstr!(name.as_bytes()));
+
+            let var = match value {
                 Some(inner) => match inner {
-                    Expr::Literal(literal) => match literal {
-                        LiteralExpr::String(value) => value,
-                    },
+                    Expr::Literal(LiteralExpr::String(string)) => {
+                        let mut value = string.to_owned();
+                        value.push('\0');
+
+                        let val = LLVMConstString(
+                            value.as_bytes().as_ptr() as *const i8,
+                            std::mem::size_of_val(value.as_bytes()) as u32,
+                            1,
+                        );
+                        LLVMBuildStore(self.builder, val, alloc);
+                        Variable {
+                            size: std::mem::size_of_val(value.as_bytes()) as u32,
+                            ptr: alloc,
+                            ty: var_type,
+                        }
+                    }
+                    Expr::Literal(LiteralExpr::Bool(bool)) => {
+                        LLVMBuildStore(
+                            self.builder,
+                            LLVMConstInt(LLVMInt1Type(), bool.into(), 1),
+                            alloc,
+                        );
+                        Variable {
+                            size: 1,
+                            ptr: alloc,
+                            ty: var_type,
+                        }
+                    }
                     _ => todo!(),
                 },
                 None => todo!(),
             };
 
-            let mut value = value.to_owned();
-            value.push('\0');
-
-            let var_type = match ty {
-                VariableType::String => LLVMArrayType(
-                    LLVMInt8Type(),
-                    std::mem::size_of_val(value.as_bytes()) as u32,
-                ),
-            };
-
-            LLVMPositionBuilderAtEnd(self.builder, specific_bb.unwrap_or(func.entry.unwrap()));
-            let alloc = LLVMBuildAlloca(self.builder, var_type, cstr!(name.as_bytes()));
-            let val = LLVMConstString(
-                value.as_bytes().as_ptr() as *const i8,
-                std::mem::size_of_val(value.as_bytes()) as u32,
-                1,
-            );
-            LLVMBuildStore(self.builder, val, alloc);
-            self.variables.insert(
-                name.to_string(),
-                Variable {
-                    size: std::mem::size_of_val(value.as_bytes()) as u32,
-                    ptr: alloc,
-                    ty: var_type,
-                },
-            );
+            self.variables.insert(name.to_string(), var);
         }
     }
 
@@ -343,7 +368,9 @@ where
             let Stmt::Function { name, nodes } = func else {
                 panic!("Not a function");
             };
-            let LiteralExpr::String(name) = name;
+            let LiteralExpr::String(name) = name else {
+                panic!("Incorrect literal")
+            };
             let main_ty = LLVMFunctionType(LLVMVoidType(), [].as_mut_ptr(), 0, 0);
             let main_func = LLVMAddFunction(current_module, cstr!(name.as_bytes()), main_ty);
 

@@ -1,6 +1,7 @@
 #[derive(Debug, Clone)]
 pub enum LiteralExpr {
     String(String),
+    Bool(bool)
 }
 
 #[derive(Debug, Clone)]
@@ -39,6 +40,7 @@ pub enum Expr {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VariableType {
     String,
+    Bool
 }
 
 #[derive(Debug, Clone)]

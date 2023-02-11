@@ -12,6 +12,41 @@ dependencies = [
 ]
 
 [[package]]
+name = "ansi_term"
+version = "0.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d52a9bb7ec0cf484c551830a7ce27bd20d67eac647e1befb56b0be4ee39a55d2"
+dependencies = [
+ "winapi",
+]
+
+[[package]]
+name = "cbt-common"
+version = "0.1.0"
+
+[[package]]
+name = "cbt-compiler"
+version = "0.1.0"
+dependencies = [
+ "cbt-common",
+]
+
+[[package]]
+name = "cbt-lexer"
+version = "0.1.0"
+dependencies = [
+ "cbt-common",
+]
+
+[[package]]
+name = "cbt-parser"
+version = "0.1.0"
+dependencies = [
+ "cbt-common",
+ "cbt-lexer",
+]
+
+[[package]]
 name = "cc"
 version = "1.0.79"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -21,7 +56,13 @@ checksum = "50d30906286121d95be3d479533b458f87493b30a4b5f79a607db8f5d11aa91f"
 name = "cobalt"
 version = "0.1.0"
 dependencies = [
+ "cbt-common",
+ "cbt-compiler",
+ "cbt-lexer",
+ "cbt-parser",
  "codespan-reporting",
+ "espan",
+ "libc",
  "llvm-sys",
  "phf",
 ]
@@ -34,6 +75,13 @@ checksum = "3538270d33cc669650c4b093848450d380def10c331d38c768e34cac80576e6e"
 dependencies = [
  "termcolor",
  "unicode-width",
+]
+
+[[package]]
+name = "espan"
+version = "0.1.0"
+dependencies = [
+ "ansi_term",
 ]
 
 [[package]]
